@@ -1,0 +1,31 @@
+ip: "172.17.0.1"
+port: 41451
+agent_names: ["Drone1", "Drone2", "Drone3"]
+dt: 0.2
+max_steps: 500
+v_max: 4.0
+yaw_rate_max_deg: 90.0
+goal_radius: 1.5
+jammer_radius: 6.0
+world_bounds: [[-60.0, 60.0], [-60.0, 60.0], [-25.0, -1.0]]
+jammer_patterns: ["Jammer*", "JammerActor*", "BP_Jammer*"]
+jammer_penalty_mode: "distance"  # 可选：distance | power
+ue_rpc:
+  enabled: false
+  url: "http://127.0.0.1:8080/jammer_power"
+  timeout: 0.5
+spawn_points:
+  Drone1: [-10.0, 0.0, -3.0]
+  Drone2: [0.0, -10.0, -3.0]
+  Drone3: [10.0, 0.0, -3.0]
+goal_points:
+  Drone1: [20.0, 20.0, -5.0]
+  Drone2: [-20.0, 20.0, -5.0]
+  Drone3: [0.0, -20.0, -5.0]
+reward:
+  progress: 1.0
+  jammer_penalty: 0.5
+  step_penalty: 0.01
+  success_bonus: 100.0
+  collision_penalty: 50.0
+  oob_penalty: 20.0
