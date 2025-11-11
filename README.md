@@ -31,6 +31,31 @@ pip install pytest pyyaml
 
 输出中将显示 `agents` 名称与每步奖励和，满足基本连通与形状自检。
 
+### UE HTTP 拉取式自检（WSL → Windows）
+
+当 UE 在 Windows 上运行并监听 `127.0.0.1:8080` 时，WSL 侧需使用 Windows 主机的可达 IP 访问该服务。可以使用以下脚本进行端到端拉取式验证：
+
+```bash
+# 安装依赖
+pip install -r requirements.txt
+
+# 自动探测 Windows 主机 IP 并自检（默认端口 8080）
+PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check --name BP_Jammer_Actor
+
+# 或显式指定 UE HTTP 基地址
+PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check \
+  --base http://<WIN_HOST_IP>:8080 --name BP_Jammer_Actor --x 10 --y 0 --z 0
+```
+
+成功判定：
+- `/ping` 返回 200 与 JSON（如 `{"status":"ok"}`）
+- `/jammers` 返回非空列表（字段包含 `name`、`location`、`isJamming` 等）
+- `/jammer_power` 至少一种调用方式（传米或传厘米）返回有效 `power` 浮点数，且时延在 10–50ms（本机）
+
+注意：
+- UE 端位置单位为 **cm**；脚本同时尝试传米与传厘米两种方式，以适配不同实现
+- 若 UE 仅绑定 `127.0.0.1`，从 WSL 访问需要使用 Windows 主机的可达 IP（如 `172.x.x.1`）；必要时在 Windows 开放 8080 端口或配置端口代理到 127.0.0.1
+
 ## 单元测试
 
 ```bash
@@ -71,7 +96,23 @@ src/airsim_multi_rl/
 ### 干扰惩罚模式
 
 - `distance`：进入 `jammer_radius` 内线性扣分（默认）
-- `power`：使用 UE 端返回的功率值（HTTP RPC），按线性比例扣分
+- `power`：使用 UE 端返回的功率值（HTTP RPC），按线性比例扣分。支持 `/jammers` 发现与基准功率缓存、`/jammer_power` 位置相关查询（单位转换 cm↔m 与步频控制）。
+
+启用功率模式（示例）：
+
+```yaml
+jammer_penalty_mode: "power"
+ue_rpc:
+  enabled: true
+  http_base: "http://<WIN_HOST_IP>:8080"
+  jammers_endpoint: "/jammers"
+  power_endpoint: "/jammer_power"
+  timeout: 0.5
+  cm_per_m: 100.0
+  query_every_n_steps: 3
+```
+
+建议将 `<WIN_HOST_IP>` 设置为 WSL 内可达的 Windows 主机 IP（可通过 `ip route | awk '/default/ {print $3}'` 获取）。
 
 ## 与旧脚本兼容
 
@@ -85,26 +126,34 @@ src/airsim_multi_rl/
 
 ## UE 端实现指南（Jammer 功率 RPC）
 
-- 蓝图或 C++ 提供一个可查询指定 Jammer 名称功率的接口 `GetJammerPower(name) -> float`
-- 通过 HTTP 暴露一个端点（示例 `http://127.0.0.1:8080/jammer_power`）：
-  - 请求：POST JSON `{ "name": "BP_Jammer_1" }` 或 GET `?name=BP_Jammer_1`
-  - 返回：JSON `{ "name": "BP_Jammer_1", "power": 12.34 }`
-  - 可使用 UE 的 HTTP 模块或嵌入式 Web 服务（插件）实现简易 Handler
+- 蓝图或 C++ 提供查询接口：`GetJammerPower(name) -> float` 与 `GetJammerPowerAtLocation(FVector)`（位置相关功率）。
+- 暴露 REST 服务（示例 `http://127.0.0.1:8080`）：
+  - `GET /ping`：健康检查
+  - `GET /jammers`：列出 Jammer 概览（名称、位置cm、半径、是否开启、基准功率）
+  - `GET|POST /jammer_power`：查询指定 Jammer 的功率（支持传入 `x/y/z` 为 cm 的世界坐标）
 - 配置：在 `src/airsim_multi_rl/config/default.yaml` 中设置：
   ```yaml
   jammer_penalty_mode: "power"
   ue_rpc:
     enabled: true
-    url: "http://127.0.0.1:8080/jammer_power"
+    http_base: "http://127.0.0.1:8080"
+    jammers_endpoint: "/jammers"
+    power_endpoint: "/jammer_power"
     timeout: 0.5
+    cm_per_m: 100.0
+    query_every_n_steps: 1
   ```
 - 环境行为：
-  - `jammer.py` 在 reset 阶段发现 Jammer 并刷新其位置；若启用 RPC，会为每个 Jammer 调用一次功率查询并缓存。
-  - `multi_drone_parallel.py` 在计算奖励时，按模式选择距离或功率作为惩罚输入，并在 `info` 中同时填充 `nearest_jammer_dist` 以便分析。
+  - `jammer.py`：reset 阶段通过 `/jammers` 缓存 Jammer 名称与位置（cm→m），并缓存基准功率；step 阶段按照 `query_every_n_steps` 频率对最近 Jammer 调用 `/jammer_power`（位置参数以 cm 传入），并回填缓存。
+  - `multi_drone_parallel.py`：奖励计算时按模式选择距离或功率（传入当前步数以控制查询频率），并在 `info` 填充 `nearest_jammer_dist` 与 `jammer_power`（power 模式）。
 
 实现细节建议（UE 端）：
-- 蓝图：为每个 Jammer Actor 维护当前输出功率（可根据距离、遮挡、随机变化、电子战模型等更新），在 HTTP Handler 中查询并返回。
-- 性能：避免每步调用场景枚举；仅在重置时刷新 Jammer 列表与位置（本项目已遵循）。
-- 稳定性：确保 HTTP 端点返回快速且有超时；在 Python 端已设置 `timeout` 防止阻塞。
+- 蓝图：为每个 Jammer Actor 维护当前输出功率（随距离/遮挡/噪声更新），在 HTTP Handler 中查询并返回。
+- 性能：避免每步枚举；仅在 reset 阶段刷新列表；复杂模型可在 Tick 缓存，再供查询。
+- 稳定性：HTTP 端点尽量快速，后端设置短超时；必要时做简单重试。
+
+## 渲染管线对齐
+- `env.render()` 现返回 `{agent: {"obs": ..., "rgb": ...}}`，其中 `rgb` 来自 AirSim 摄像头（不可用时为 None）。
+- 可按需扩展摄像头名称与返回格式（例如 dict 包含宽高、时间戳）。
 
 已知限制：离线 DummyClient 不进行真实物理与姿态仿真，仅用于形状与基本逻辑验证。

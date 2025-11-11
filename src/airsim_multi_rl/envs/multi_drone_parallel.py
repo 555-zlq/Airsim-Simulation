@@ -104,7 +104,19 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
         return obs, rews, terms, truncs, infos
 
     def render(self):
-        return {a: self._get_obs(a) for a in self.agents}
+        """返回当前帧的渲染信息。
+
+        为对齐渲染管线，提供两类输出：
+        - obs：17维观测（兼容既有流程）
+        - rgb：来自 AirSim 摄像头的 RGB 图像（若不可用则为 None）
+        """
+        frames: Dict[str, dict] = {}
+        for a in self.agents:
+            frames[a] = {
+                "obs": self._get_obs(a),
+                "rgb": self.client.get_rgb_image(vehicle_name=a, camera_name="0") if hasattr(self.client, "get_rgb_image") else None,
+            }
+        return frames
 
     def close(self):
         for a in self.agents:
@@ -150,8 +162,8 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
         oob = not in_bounds(pos, self.cfg.world_bounds)
         reached = dist_to_goal <= self.cfg.goal_radius
 
-        # 根据模式选择距离或功率作为第三参数
-        d_or_power = d_jam if self.cfg.jammer_penalty_mode != "power" else float(self.jammers.nearest_power(pos))
+        # 根据模式选择距离或功率作为第三参数（传入当前步数以实现步频控制）
+        d_or_power = d_jam if self.cfg.jammer_penalty_mode != "power" else float(self.jammers.nearest_power(pos, step=self._steps))
         r, info = self.rew.compute(self._prev_goal_dist[a], dist_to_goal, d_or_power, collided, oob, reached)
         if self.cfg.jammer_penalty_mode == "power":
             info["nearest_jammer_dist"] = d_jam

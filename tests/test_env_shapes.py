@@ -1,8 +1,8 @@
 from __future__ import annotations
 import numpy as np
-from src.airsim_multi_rl.config import EnvConfig
-from src.airsim_multi_rl.envs.multi_drone_parallel import AirSimMultiDroneParallelEnv
-from src.airsim_multi_rl.envs.airsim_client import AirSimClient
+from airsim_multi_rl.config import EnvConfig
+from airsim_multi_rl.envs.multi_drone_parallel import AirSimMultiDroneParallelEnv
+from airsim_multi_rl.envs.airsim_client import AirSimClient
 
 class DummyClient(AirSimClient):
     """最小 Dummy 适配层，用于在无 AirSim 的情况下运行形状测试。"""
@@ -42,6 +42,10 @@ class DummyClient(AirSimClient):
                 self.has_collided = False
         return _Col()
 
+    def get_rgb_image(self, vehicle_name: str, camera_name: str = "0"):
+        # 返回一个固定的 8x8 RGB 帧，便于验证渲染结构
+        return np.zeros((8, 8, 3), dtype=np.uint8)
+
 
 def test_spaces_and_reset():
     cfg = EnvConfig()
@@ -54,4 +58,35 @@ def test_spaces_and_reset():
     assert set(obs.keys()) == set(env.agents)
     for a, ob in obs.items():
         assert ob.shape == (17,)
+    env.close()
+
+
+def test_render_contains_rgb_and_obs():
+    cfg = EnvConfig()
+    env = AirSimMultiDroneParallelEnv(cfg, client=DummyClient())
+    env.reset()
+    frames = env.render()
+    for a in env.agents:
+        assert isinstance(frames[a], dict)
+        assert "obs" in frames[a]
+        assert "rgb" in frames[a]
+        # rgb 为 numpy 数组或 None，这里要求数组形状为 (H,W,3)
+        rgb = frames[a]["rgb"]
+        assert rgb is None or (rgb.ndim == 3 and rgb.shape[2] >= 3)
+    env.close()
+
+
+def test_power_mode_info_keys():
+    cfg = EnvConfig()
+    cfg.jammer_penalty_mode = "power"
+    # 禁用 HTTP，确保在无 UE 情况下也能运行；功率应为 0
+    cfg.ue_rpc.enabled = False
+    env = AirSimMultiDroneParallelEnv(cfg, client=DummyClient())
+    env.reset()
+    actions = {a: np.zeros((4,), dtype=np.float32) for a in env.agents}
+    obs, rews, terms, truncs, infos = env.step(actions)
+    for a in env.agents:
+        assert "dist_to_goal" in infos[a]
+        assert "jammer_power" in infos[a]
+        assert isinstance(infos[a]["jammer_power"], float)
     env.close()

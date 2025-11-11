@@ -71,10 +71,21 @@ class UERPCConfig:
 
     当 enabled=True 时，jammer.py 将通过 HTTP 查询 UE 端暴露的 `GetJammerPower(name)` 功能。
     """
-
+    # 是否启用 UE 端 HTTP RPC
     enabled: bool = False
-    url: str = "http://127.0.0.1:8080/jammer_power"
+    # HTTP 基地址（例如 http://127.0.0.1:8080），用于 /ping、/jammers、/jammer_power
+    http_base: str = "http://127.0.0.1:8080"
+    # 端点路径（可按需覆盖）
+    jammers_endpoint: str = "/jammers"
+    power_endpoint: str = "/jammer_power"
+    # 兼容旧字段：若设置了 url，则优先使用该完整 URL 进行功率查询
+    url: str = ""
+    # 请求超时（秒）
     timeout: float = 0.5
+    # 单位转换：UE 端使用 cm；训练环境使用 m。默认 1m = 100cm
+    cm_per_m: float = 100.0
+    # 位置功率查询的步频（每 N 步查询一次；1 为每步查询）
+    query_every_n_steps: int = 1
 
 
 def _deep_update(dst: dict, src: dict) -> dict:

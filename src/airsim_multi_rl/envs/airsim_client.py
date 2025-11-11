@@ -84,3 +84,32 @@ class AirSimClient:
 
     def get_collision(self, vehicle_name: str):
         return self.client.simGetCollisionInfo(vehicle_name=vehicle_name)
+
+    # ---- 图像渲染 ----
+    def get_rgb_image(self, vehicle_name: str, camera_name: str = "0"):
+        """获取指定载具与摄像头的 RGB 图像（numpy 数组）。
+
+        说明：
+        - 使用 AirSim 的 `simGetImages` 请求 `ImageType.Scene`，pixels_as_float=False, compress=True。
+        - 返回形状约为 (H, W, 3) 的 uint8 数组；若失败返回 None。
+        """
+        try:
+            req = [
+                self._airsim.ImageRequest(camera_name, self._airsim.ImageType.Scene, False, True)
+            ]
+            resp = self.client.simGetImages(req, vehicle_name=vehicle_name)
+            if not resp:
+                return None
+            r0 = resp[0]
+            # 将压缩的 PNG 数据解码为数组；AirSim 提供 image_data_uint8 与 width/height
+            import numpy as _np
+            img1d = _np.frombuffer(r0.image_data_uint8, dtype=_np.uint8)
+            if img1d.size == 0:
+                return None
+            img_rgba = img1d.reshape((r0.height, r0.width, -1))
+            # 若返回 RGBA，取前 3 通道；否则直接返回
+            if img_rgba.shape[2] >= 3:
+                return img_rgba[:, :, :3]
+            return img_rgba
+        except Exception:
+            return None

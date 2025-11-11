@@ -12,8 +12,12 @@ jammer_patterns: ["Jammer*", "JammerActor*", "BP_Jammer*"]
 jammer_penalty_mode: "distance"  # 可选：distance | power
 ue_rpc:
   enabled: false
-  url: "http://127.0.0.1:8080/jammer_power"
+  http_base: "http://172.17.0.1:8080"
+  jammers_endpoint: "/jammers"
+  power_endpoint: "/jammer_power"
   timeout: 0.5
+  cm_per_m: 100.0
+  query_every_n_steps: 1
 spawn_points:
   Drone1: [-10.0, 0.0, -3.0]
   Drone2: [0.0, -10.0, -3.0]
