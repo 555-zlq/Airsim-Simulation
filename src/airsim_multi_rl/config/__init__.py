@@ -63,6 +63,8 @@ class EnvConfig:
     )
 
     reward: RewardWeights = field(default_factory=RewardWeights)
+    # 干扰层配置（仅影响观测层的 pos 偏移）
+    interference: "InterferenceConfig" = field(default_factory=lambda: InterferenceConfig())
 
 
 @dataclass
@@ -86,6 +88,20 @@ class UERPCConfig:
     cm_per_m: float = 100.0
     # 位置功率查询的步频（每 N 步查询一次；1 为每步查询）
     query_every_n_steps: int = 1
+
+
+@dataclass
+class InterferenceConfig:
+    """干扰层配置。
+
+    该配置用于在观测层对位置进行可控扰动，仅影响 `obs`，不改变环境中的真实位置与动作。
+    """
+    enabled: bool = False  # 干扰开关
+    mode: str = "gaussian"  # 可选：gaussian | bias
+    gaussian_sigma: float = 0.02  # 高斯噪声标准差（米），满足低延迟计算
+    bias_vector: Vec3 = (0.0, 0.0, 0.0)  # 系统偏移（米）
+    precision: int = 4  # 偏移保留小数位（默认 4）
+    seed: Optional[int] = None  # 干扰随机种子（可选，便于复现实验）
 
 
 def _deep_update(dst: dict, src: dict) -> dict:
@@ -132,11 +148,15 @@ def load_env_config(user_yaml_path: Optional[str] = None, cli_overrides: Optiona
         return RewardWeights(**d) if d else RewardWeights()
     def as_rpc(d: dict) -> UERPCConfig:
         return UERPCConfig(**d) if d else UERPCConfig()
+    def as_interf(d: dict) -> "InterferenceConfig":
+        return InterferenceConfig(**d) if d else InterferenceConfig()
 
     if "reward" in cfg_dict and isinstance(cfg_dict["reward"], dict):
         cfg_dict["reward"] = as_reward(cfg_dict["reward"])
     if "ue_rpc" in cfg_dict and isinstance(cfg_dict["ue_rpc"], dict):
         cfg_dict["ue_rpc"] = as_rpc(cfg_dict["ue_rpc"])
+    if "interference" in cfg_dict and isinstance(cfg_dict["interference"], dict):
+        cfg_dict["interference"] = as_interf(cfg_dict["interference"])
 
     # 使用 dataclasses.replace 兼容未知字段
     base = EnvConfig()
@@ -145,4 +165,4 @@ def load_env_config(user_yaml_path: Optional[str] = None, cli_overrides: Optiona
     return dataclasses.replace(base, **filtered)
 
 
-__all__ = ["EnvConfig", "RewardWeights", "UERPCConfig", "load_env_config"]
+__all__ = ["EnvConfig", "RewardWeights", "UERPCConfig", "InterferenceConfig", "load_env_config"]

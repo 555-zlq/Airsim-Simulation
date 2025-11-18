@@ -97,6 +97,45 @@ src/airsim_multi_rl/
 - 奖励：进步奖励、干扰惩罚、成功/碰撞/越界/步惩罚（权重可配）。
 - 终止/截断：到达目标/碰撞/越界为终止；步数达上限为截断。
 
+### 干扰层（Interference Layer）
+
+为支持“状态干扰”实验，环境新增 `envs/interference.py` 干扰层：
+- 仅对观测中的位置分量 `obs[0:3]` 施加偏移，不改变环境真实状态。
+- 支持两种模式：
+  - `gaussian`：按 `gaussian_sigma` 生成高斯噪声；可用干扰强度作为尺度。
+  - `bias`：固定偏置向量，可按强度比例缩放。
+- 精度与鲁棒：偏移结果保留 `precision` 位小数；异常输入降级为原值。
+- 集成位置：在 `multi_drone_parallel.py` 的 `reset/step` 返回观测前应用。奖励与终止均使用未扰动的原始观测计算。
+
+启用示例（`config/default.yaml`）：
+
+```yaml
+interference:
+  enabled: true
+  mode: "gaussian"      # 或 "bias"
+  gaussian_sigma: 0.02   # 米
+  bias_vector: [0.0, 0.0, 0.0]
+  precision: 4
+  seed: null
+```
+
+或在代码中：
+
+```python
+from airsim_multi_rl.config import EnvConfig
+cfg = EnvConfig()
+cfg.interference.enabled = True
+cfg.interference.mode = "gaussian"
+```
+
+强度来源：
+- 当 `jammer_penalty_mode=power` 时，使用最近 Jammer 的 `nearest_power(pos)`。
+- 否则使用最近 Jammer 的距离 `||nearest_jammer_delta||`。
+
+观测与信息：
+- 返回观测仅位置分量被扰动；其他维度不变。
+- `infos[agent]` 增加 `pos_raw`（原始位置备份）与 `timestamp`（秒），便于对比实验。
+
 ### 干扰惩罚模式
 
 - `distance`：进入 `jammer_radius` 内线性扣分（默认）

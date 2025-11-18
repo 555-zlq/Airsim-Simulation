@@ -49,6 +49,10 @@ class DummyClient(AirSimClient):
 
 def test_spaces_and_reset():
     cfg = EnvConfig()
+    # 启用干扰层（高斯），确保不影响空间与形状
+    cfg.interference.enabled = True
+    cfg.interference.mode = "gaussian"
+    cfg.interference.gaussian_sigma = 0.01
     env = AirSimMultiDroneParallelEnv(cfg, client=DummyClient())
     # 检查空间形状
     for a in env.agents:
@@ -58,6 +62,10 @@ def test_spaces_and_reset():
     assert set(obs.keys()) == set(env.agents)
     for a, ob in obs.items():
         assert ob.shape == (17,)
+        # 干扰层只影响位置分量：检查 pos_raw 备份存在，且类型正确
+        assert "pos_raw" in infos[a]
+        assert "timestamp" in infos[a]
+        assert isinstance(infos[a]["pos_raw"], list) and len(infos[a]["pos_raw"]) == 3
     env.close()
 
 
@@ -81,6 +89,10 @@ def test_power_mode_info_keys():
     cfg.jammer_penalty_mode = "power"
     # 禁用 HTTP，确保在无 UE 情况下也能运行；功率应为 0
     cfg.ue_rpc.enabled = False
+    # 启用干扰层偏置，验证不破坏 info 键
+    cfg.interference.enabled = True
+    cfg.interference.mode = "bias"
+    cfg.interference.bias_vector = (0.001, -0.001, 0.0)
     env = AirSimMultiDroneParallelEnv(cfg, client=DummyClient())
     env.reset()
     actions = {a: np.zeros((4,), dtype=np.float32) for a in env.agents}
@@ -89,4 +101,7 @@ def test_power_mode_info_keys():
         assert "dist_to_goal" in infos[a]
         assert "jammer_power" in infos[a]
         assert isinstance(infos[a]["jammer_power"], float)
+        # 干扰层集成后应包含时间戳与原始位置备份
+        assert "timestamp" in infos[a]
+        assert "pos_raw" in infos[a]
     env.close()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Dict, List, Optional
+import time
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -13,6 +14,7 @@ from .observation import ObservationBuilder
 from .reward import RewardComposer
 from .termination import TerminationChecker
 from .actions import ActionExecutor
+from .interference import InterferenceLayer
 
 
 class AirSimMultiDroneParallelEnv(ParallelEnv):
@@ -39,6 +41,8 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
         self.rew = RewardComposer(self.cfg.reward, self.cfg.jammer_radius, self.cfg.goal_radius, mode=self.cfg.jammer_penalty_mode)
         self.term = TerminationChecker(self.cfg.max_steps)
         self.action_exec = ActionExecutor(self.cfg.v_max, self.cfg.yaw_rate_max_deg)
+        # 干扰层：仅在观测层对位置分量进行偏移，不影响真实状态与奖励/终止逻辑
+        self._interference = InterferenceLayer.from_config(self.cfg.interference)
 
         # 空间定义
         self.v_max = float(self.cfg.v_max)
@@ -75,8 +79,21 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
         self._truncated = {a: False for a in self.agents}
         self._prev_goal_dist = {a: None for a in self.agents}
 
-        obs = {a: self._get_obs(a) for a in self.agents}
-        infos = {a: {} for a in self.agents}
+        obs, infos = {}, {}
+        for a in self.agents:
+            # 原始观测（用于奖励与终止）
+            ob_raw = self._get_obs(a)
+            pos_raw = ob_raw[0:3]
+            # 干扰强度：功率模式优先，否则使用最近 Jammer 距离
+            if self.cfg.jammer_penalty_mode == "power":
+                strength = float(self.jammers.nearest_power(pos_raw, step=None))
+            else:
+                jam_vec = ob_raw[10:13]
+                strength = float(np.linalg.norm(jam_vec))
+            # 返回给策略的观测：仅位置分量施加干扰
+            ob_int = self._interference.apply(ob_raw, strength=strength)
+            obs[a] = ob_int
+            infos[a] = {"timestamp": time.time(), "pos_raw": pos_raw.tolist()}
         return obs, infos
 
     def step(self, actions: Dict[str, np.ndarray]):
@@ -95,10 +112,23 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
 
         obs, rews, terms, truncs, infos = {}, {}, {}, {}, {}
         for a in self.agents:
-            ob = self._get_obs(a)
-            r, info = self._reward_and_info(a, ob)
+            # 原始观测（用于奖励与终止）
+            ob_raw = self._get_obs(a)
+            r, info = self._reward_and_info(a, ob_raw)
             done, trunc = self.term.done_trunc(self._steps, info["collided"], info["out_of_bounds"], info["reached_goal"])
-            obs[a], rews[a], terms[a], truncs[a], infos[a] = ob, r, done, trunc, info
+            # 计算干扰强度
+            pos_raw = ob_raw[0:3]
+            if self.cfg.jammer_penalty_mode == "power":
+                strength = float(self.jammers.nearest_power(pos_raw, step=self._steps))
+            else:
+                jam_vec = ob_raw[10:13]
+                strength = float(np.linalg.norm(jam_vec))
+            # 返回给策略的观测：施加干扰
+            ob_int = self._interference.apply(ob_raw, strength=strength)
+            obs[a], rews[a], terms[a], truncs[a], infos[a] = ob_int, r, done, trunc, info
+            # 增强 info：加入原始位置与时间戳备份
+            infos[a]["timestamp"] = time.time()
+            infos[a]["pos_raw"] = pos_raw.tolist()
             self._terminated[a], self._truncated[a] = done, trunc
 
         return obs, rews, terms, truncs, infos
