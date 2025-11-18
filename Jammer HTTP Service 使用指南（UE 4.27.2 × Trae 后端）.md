@@ -53,7 +53,7 @@
 
 - 作为 UE Actor 拖入关卡即可**启动 REST 服务**。
 - 配置项：
-  - `Port`（默认 `8080`）：HTTP 监听端口。
+  - `Port`（默认 `18080`）：HTTP 监听端口。
 - 返回均为 **JSON**，并设置 CORS 响应头以便浏览器/本机调试。
 
 ------
@@ -73,9 +73,9 @@ HTTP, HttpServer, Json, JsonUtilities
 3. **运行/自测**
 
 ```bash
-curl "http://127.0.0.1:8080/ping"
-curl "http://127.0.0.1:8080/jammers"
-curl "http://127.0.0.1:8080/jammer_power?name=BP_Jammer_1&x=1000&y=0&z=0"
+curl "http://127.0.0.1:18080/ping"
+curl "http://127.0.0.1:18080/jammers"
+curl "http://127.0.0.1:18080/jammer_power?name=BP_Jammer_1&x=1000&y=0&z=0"
 ```
 
 ------
@@ -246,7 +246,7 @@ reward -= 0.1 * min(power, 10.0)
 
 ## 安全与部署注意事项
 
-- **默认仅本机使用**（`127.0.0.1:8080`）；如需跨机访问，请在系统防火墙放行端口，并考虑加入简单鉴权（令牌）或限制来源 IP。
+- **默认仅本机使用**（`127.0.0.1:18080`）；如需跨机访问，请在系统防火墙放行端口，并考虑加入简单鉴权（令牌）或限制来源 IP。
 
 - **CORS**：已添加 `Access-Control-Allow-Origin: *` 便于调试；生产环境可限定域名或移除。
 

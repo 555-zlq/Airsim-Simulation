@@ -33,18 +33,22 @@ pip install pytest pyyaml
 
 ### UE HTTP 拉取式自检（WSL → Windows）
 
-当 UE 在 Windows 上运行并监听 `127.0.0.1:8080` 时，WSL 侧需使用 Windows 主机的可达 IP 访问该服务。可以使用以下脚本进行端到端拉取式验证：
+当 UE 在 Windows 上运行并监听 `127.0.0.1:18080` 时，WSL 侧需使用 Windows 主机的可达 IP 访问该服务。可以使用以下脚本进行端到端拉取式验证：
 
 ```bash
 # 安装依赖
 pip install -r requirements.txt
 
-# 自动探测 Windows 主机 IP 并自检（默认端口 8080）
-PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check --name BP_Jammer_Actor
+# 自动探测 Windows 主机 IP 并自检（默认端口 18080）
+PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check --name BP_JammerActor
 
-# 或显式指定 UE HTTP 基地址
+# 或显式指定 UE HTTP 基地址（端口统一为 18080）
 PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check \
-  --base http://<WIN_HOST_IP>:8080 --name BP_Jammer_Actor --x 10 --y 0 --z 0
+  --base http://<WIN_HOST_IP>:18080 --name BP_JammerActor --x 10 --y 0 --z 0
+
+# 多 Jammer 名称一次性验证（建议与你的 UE 名称一致）
+PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check \
+  --base http://<WIN_HOST_IP>:18080 --names BP_JammerActor,BP_JammerActor2,BP_JammerActor3 --x 10 --y 0 --z 0
 ```
 
 成功判定：
@@ -54,7 +58,7 @@ PYTHONPATH=src python -m airsim_multi_rl.scripts.http_pull_check \
 
 注意：
 - UE 端位置单位为 **cm**；脚本同时尝试传米与传厘米两种方式，以适配不同实现
-- 若 UE 仅绑定 `127.0.0.1`，从 WSL 访问需要使用 Windows 主机的可达 IP（如 `172.x.x.1`）；必要时在 Windows 开放 8080 端口或配置端口代理到 127.0.0.1
+- 若 UE 仅绑定 `127.0.0.1`，从 WSL 访问需要使用 Windows 主机的可达 IP（如 `172.x.x.1`）；必要时在 Windows 开放 18080 端口或配置端口代理到 127.0.0.1
 
 ## 单元测试
 
@@ -104,7 +108,7 @@ src/airsim_multi_rl/
 jammer_penalty_mode: "power"
 ue_rpc:
   enabled: true
-  http_base: "http://<WIN_HOST_IP>:8080"
+  http_base: "http://<WIN_HOST_IP>:18080"
   jammers_endpoint: "/jammers"
   power_endpoint: "/jammer_power"
   timeout: 0.5
@@ -127,7 +131,7 @@ ue_rpc:
 ## UE 端实现指南（Jammer 功率 RPC）
 
 - 蓝图或 C++ 提供查询接口：`GetJammerPower(name) -> float` 与 `GetJammerPowerAtLocation(FVector)`（位置相关功率）。
-- 暴露 REST 服务（示例 `http://127.0.0.1:8080`）：
+- 暴露 REST 服务（示例 `http://127.0.0.1:18080`）：
   - `GET /ping`：健康检查
   - `GET /jammers`：列出 Jammer 概览（名称、位置cm、半径、是否开启、基准功率）
   - `GET|POST /jammer_power`：查询指定 Jammer 的功率（支持传入 `x/y/z` 为 cm 的世界坐标）
@@ -136,7 +140,7 @@ ue_rpc:
   jammer_penalty_mode: "power"
   ue_rpc:
     enabled: true
-    http_base: "http://127.0.0.1:8080"
+    http_base: "http://127.0.0.1:18080"
     jammers_endpoint: "/jammers"
     power_endpoint: "/jammer_power"
     timeout: 0.5

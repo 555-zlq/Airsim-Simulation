@@ -73,8 +73,8 @@ class UERPCConfig:
     """
     # 是否启用 UE 端 HTTP RPC
     enabled: bool = False
-    # HTTP 基地址（例如 http://127.0.0.1:8080），用于 /ping、/jammers、/jammer_power
-    http_base: str = "http://127.0.0.1:8080"
+    # HTTP 基地址（例如 http://127.0.0.1:18080），用于 /ping、/jammers、/jammer_power
+    http_base: str = "http://127.0.0.1:18080"
     # 端点路径（可按需覆盖）
     jammers_endpoint: str = "/jammers"
     power_endpoint: str = "/jammer_power"

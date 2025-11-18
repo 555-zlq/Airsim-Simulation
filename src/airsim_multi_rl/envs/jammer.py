@@ -65,8 +65,28 @@ class JammerLocator:
             except Exception:
                 fetched_from_rpc = False
 
+        # 兼容：部分 UE /jammers 返回不完整名单（例如仅返回开启 isJamming 的 Actor）。
+        # 为提高鲁棒性，在 reset 阶段将 AirSim 场景枚举得到的名称并集到 HTTP 返回的名单中，
+        # 对未提供位置的名称通过 AirSim 姿态查询补全位置。
+        try:
+            # 仅在 reset 阶段调用一次枚举，满足性能约束
+            discovered: List[str] = []
+            for p in self.patterns:
+                try:
+                    discovered += self.client.list_scene_objects(p)
+                except Exception:
+                    pass
+            discovered = sorted(list(set(discovered)))
+            # 合并名称集合
+            merged = sorted(list(set(self.names) | set(discovered))) if self.names else discovered
+            self.names = merged
+        except Exception:
+            # 场景枚举失败时忽略，继续后续流程
+            pass
+
         # 若未从 UE RPC 成功获取，则回退到 AirSim 场景枚举与姿态查询
         if not fetched_from_rpc:
+            # 完全回退：仅使用 AirSim 姿态补全全部位置
             if not self.names:
                 self.discover()
             for n in self.names:
@@ -79,6 +99,27 @@ class JammerLocator:
             # 如果启用 RPC，尝试为每个 Jammer 拉取一次基准功率
             if self.rpc.enabled:
                 for n in self.names:
+                    try:
+                        self.powers[n] = float(self._get_power_via_http(n))
+                    except Exception:
+                        self.powers[n] = 0.0
+        else:
+            # 半回退：HTTP 已获取部分位置；对 HTTP 未包含但枚举得到的名称，使用 AirSim 姿态补全位置。
+            for n in self.names:
+                if n in self.positions:
+                    continue
+                try:
+                    pose = self.client.get_object_pose(n)
+                    v = pose.position
+                    self.positions[n] = np.array([v.x_val, v.y_val, v.z_val], dtype=np.float32)
+                except Exception:
+                    # 该名称无法从 AirSim 获取位置则跳过
+                    continue
+            # 尝试为新增的名称获取一次基准功率（若 HTTP 端支持该名称）
+            if self.rpc.enabled:
+                for n in self.names:
+                    if n in self.powers:
+                        continue
                     try:
                         self.powers[n] = float(self._get_power_via_http(n))
                     except Exception:

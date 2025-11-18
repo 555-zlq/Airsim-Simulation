@@ -12,7 +12,7 @@ jammer_patterns: ["Jammer*", "JammerActor*", "BP_Jammer*"]
 jammer_penalty_mode: "distance"  # 可选：distance | power
 ue_rpc:
   enabled: false
-  http_base: "http://172.17.0.1:8080"
+  http_base: "http://172.17.0.1:18080"
   jammers_endpoint: "/jammers"
   power_endpoint: "/jammer_power"
   timeout: 0.5
