@@ -65,6 +65,7 @@ class EnvConfig:
     reward: RewardWeights = field(default_factory=RewardWeights)
     # 干扰层配置（仅影响观测层的 pos 偏移）
     interference: "InterferenceConfig" = field(default_factory=lambda: InterferenceConfig())
+    logging: "LoggingConfig" = field(default_factory=lambda: LoggingConfig())
 
 
 @dataclass
@@ -102,6 +103,20 @@ class InterferenceConfig:
     bias_vector: Vec3 = (0.0, 0.0, 0.0)  # 系统偏移（米）
     precision: int = 4  # 偏移保留小数位（默认 4）
     seed: Optional[int] = None  # 干扰随机种子（可选，便于复现实验）
+
+
+@dataclass
+class LoggingConfig:
+    """训练日志配置（结构化 JSON + 控制台 + 文件轮转）。"""
+    enabled: bool = True
+    level: str = "INFO"  # DEBUG/INFO/WARNING/ERROR
+    console: bool = True
+    file: bool = True
+    file_path: str = "logs/train.log"
+    max_bytes: int = 5 * 1024 * 1024  # 5MB
+    backup_count: int = 3
+    queue: bool = True  # 使用队列处理，降低开销
+    include_metrics_highlight: bool = True  # 关键指标字段高亮（JSON字段）
 
 
 def _deep_update(dst: dict, src: dict) -> dict:
@@ -150,6 +165,8 @@ def load_env_config(user_yaml_path: Optional[str] = None, cli_overrides: Optiona
         return UERPCConfig(**d) if d else UERPCConfig()
     def as_interf(d: dict) -> "InterferenceConfig":
         return InterferenceConfig(**d) if d else InterferenceConfig()
+    def as_logging(d: dict) -> "LoggingConfig":
+        return LoggingConfig(**d) if d else LoggingConfig()
 
     if "reward" in cfg_dict and isinstance(cfg_dict["reward"], dict):
         cfg_dict["reward"] = as_reward(cfg_dict["reward"])
@@ -157,6 +174,8 @@ def load_env_config(user_yaml_path: Optional[str] = None, cli_overrides: Optiona
         cfg_dict["ue_rpc"] = as_rpc(cfg_dict["ue_rpc"])
     if "interference" in cfg_dict and isinstance(cfg_dict["interference"], dict):
         cfg_dict["interference"] = as_interf(cfg_dict["interference"])
+    if "logging" in cfg_dict and isinstance(cfg_dict["logging"], dict):
+        cfg_dict["logging"] = as_logging(cfg_dict["logging"])
 
     # 使用 dataclasses.replace 兼容未知字段
     base = EnvConfig()
@@ -165,4 +184,11 @@ def load_env_config(user_yaml_path: Optional[str] = None, cli_overrides: Optiona
     return dataclasses.replace(base, **filtered)
 
 
-__all__ = ["EnvConfig", "RewardWeights", "UERPCConfig", "InterferenceConfig", "load_env_config"]
+__all__ = [
+    "EnvConfig",
+    "RewardWeights",
+    "UERPCConfig",
+    "InterferenceConfig",
+    "LoggingConfig",
+    "load_env_config",
+]

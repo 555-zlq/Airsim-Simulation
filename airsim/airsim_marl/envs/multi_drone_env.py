@@ -12,6 +12,7 @@ from ..utils import clip, in_bounds
 from ..sim.airsim_client import AirSimClient
 from ..sim.drone_agent import DroneAgent
 from ..sim.world import World
+from .jammer import CommJammerModel
 
 class AirSimMultiDroneParallelEnv(ParallelEnv):
     metadata = {"name": "airsim_multi_drone_parallel_v1"}
@@ -25,6 +26,7 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
         self.client = AirSimClient(self.cfg.ip, self.cfg.port)
         self.world = World(self.client, self.cfg.jammer_patterns, self.cfg.world_bounds)
         self.world.refresh_jammers()
+        self.jammer_model = CommJammerModel(self.world, self.cfg)
 
         # drones
         self.drones: Dict[str, DroneAgent] = {a: DroneAgent(self.client, a) for a in self.agents}
@@ -103,8 +105,23 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
 
         jam_vec, _ = self.world.nearest_jammer_vec(pos)
         last_action = self.drones[a].last_action.astype(np.float32)
+        # 计算通信频点（支持跳频）
+        freq = float(self.cfg.comm_freq_hz.get(a, 2.4e9))
+        if self.cfg.hop_enabled:
+            seq = self.cfg.hop_sequence.get(a, [freq])
+            if len(seq) > 0:
+                idx = (self._steps // max(int(self.cfg.hop_period_s / max(self.cfg.dt, 1e-6)), 1)) % len(seq)
+                freq = float(seq[idx])
+        # 更新 jammer 指向（使用最近干扰器追踪该无人机）
+        self.jammer_model.update_pointing(target_name=a, target_pos=pos, dt_s=self.cfg.dt, detected_freq_hz=freq)
+        # 计算 SINR 并 jammed 标志
+        sinr_db = self.jammer_model.sinr_db(target_pos=pos, target_tx_dbm=float(self.cfg.comm_tx_dbm_per_drone.get(a, 20.0)), freq_hz=freq)
+        is_jammed = 1.0 if sinr_db < self.cfg.jammer_target_sinr_db else 0.0
 
-        return np.concatenate([pos, vel, np.array([yaw], dtype=np.float32), goal_delta, jam_vec, last_action], axis=0)
+        return np.concatenate([
+            pos, vel, np.array([yaw], dtype=np.float32),
+            goal_delta, jam_vec, last_action
+        ], axis=0)
 
     def _reward_and_info(self, a: str, ob: np.ndarray):
         pos = ob[0:3]; goal_delta = ob[7:10]; jam_vec = ob[10:13]
@@ -115,9 +132,16 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
         self._prev_goal_dist[a] = dist_to_goal
 
         r = 1.0 * progress  # progress reward
-        d_jam = float(np.linalg.norm(jam_vec))
-        if d_jam < self.cfg.jammer_radius:
-            r -= 0.5 * (self.cfg.jammer_radius - d_jam)
+        # 通信干扰惩罚（基于 SINR）
+        freq = float(self.cfg.comm_freq_hz.get(a, 2.4e9))
+        if self.cfg.hop_enabled:
+            seq = self.cfg.hop_sequence.get(a, [freq])
+            if len(seq) > 0:
+                idx = (self._steps // max(int(self.cfg.hop_period_s / max(self.cfg.dt, 1e-6)), 1)) % len(seq)
+                freq = float(seq[idx])
+        sinr_db = self.jammer_model.sinr_db(target_pos=pos, target_tx_dbm=float(self.cfg.comm_tx_dbm_per_drone.get(a, 20.0)), freq_hz=freq)
+        per = self.jammer_model.per_from_sinr(sinr_db)
+        r -= self.cfg.jammer_penalty_w * per
         r -= 0.01  # step penalty
 
         collided = self.drones[a].collided()
@@ -132,7 +156,8 @@ class AirSimMultiDroneParallelEnv(ParallelEnv):
             "out_of_bounds": oob,
             "reached_goal": reached,
             "dist_to_goal": dist_to_goal,
-            "nearest_jammer_dist": d_jam,
+            "sinr_db": sinr_db,
+            "per": per,
         }
         return float(r), info
 

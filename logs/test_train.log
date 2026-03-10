@@ -1,0 +1,16 @@
+{"ts": "2025-11-18T11:00:14", "level": "INFO", "name": "rl.train", "msg": "episode_start", "episode": 1}
+{"ts": "2025-11-18T11:00:14", "level": "INFO", "name": "rl.train", "msg": "policy_update", "episode": 1, "step": 1, "metrics": {"lr": 0.001, "loss": 0.0}}
+{"ts": "2025-11-18T11:00:14", "level": "INFO", "name": "rl.train", "msg": "step_after", "episode": 1, "step": 1, "actions": {"Drone1": [0, 0, 0, 0]}, "reward": {"Drone1": 0.0}, "info": {"Drone1": {"dist_to_goal": 0.0}}}
+{"ts": "2025-11-18T11:00:14", "level": "INFO", "name": "rl.train", "msg": "episode_end", "episode": 1, "reward_sum": 0.0}
+{"ts":"2025-11-18T11:39:20","level":"INFO","name":"rl.train","msg":"episode_start","episode":1}
+{"ts":"2025-11-18T11:39:20","level":"INFO","name":"rl.train","msg":"policy_update","episode":1,"step":1,"metrics":{"lr":0.001,"loss":0.0}}
+{"ts":"2025-11-18T11:39:20","level":"INFO","name":"rl.train","msg":"step_after","episode":1,"step":1,"actions":{"Drone1":[0,0,0,0]},"reward":{"Drone1":0.0},"info":{"Drone1":{"dist_to_goal":0.0}}}
+{"ts":"2025-11-18T11:39:20","level":"INFO","name":"rl.train","msg":"episode_end","episode":1,"reward_sum":0.0}
+{"ts":"2025-11-18T11:39:20","level":"INFO","name":"rl.train","msg":"[INTERFERENCE]","episode":1,"step":1,"strength":4.3433309093538334e-12,"kind":"power","unit":"dB","agent":"Drone1","raw_strength":1.0,"raw_unit":"power"}
+{"ts":"2025-11-18T11:39:20","level":"INFO","name":"rl.train","msg":"[INTERFERENCE]","episode":1,"step":2,"strength":3.5,"kind":"distance","unit":"meter","agent":"Drone2","raw_strength":3.5,"raw_unit":"meter"}
+{"ts":"2025-11-18T11:43:34","level":"INFO","name":"rl.train","msg":"episode_start","episode":1}
+{"ts":"2025-11-18T11:43:34","level":"INFO","name":"rl.train","msg":"policy_update","episode":1,"step":1,"metrics":{"lr":0.001,"loss":0.0}}
+{"ts":"2025-11-18T11:43:34","level":"INFO","name":"rl.train","msg":"step_after","episode":1,"step":1,"actions":{"Drone1":[0,0,0,0]},"reward":{"Drone1":0.0},"info":{"Drone1":{"dist_to_goal":0.0}}}
+{"ts":"2025-11-18T11:43:34","level":"INFO","name":"rl.train","msg":"episode_end","episode":1,"reward_sum":0.0}
+{"ts":"2025-11-18T11:43:34","level":"INFO","name":"rl.train","msg":"[INTERFERENCE]","episode":1,"step":1,"strength":4.3433309093538334e-12,"kind":"power","unit":"dB","agent":"Drone1","raw_strength":1.0,"raw_unit":"power"}
+{"ts":"2025-11-18T11:43:34","level":"INFO","name":"rl.train","msg":"[INTERFERENCE]","episode":1,"step":2,"strength":3.5,"kind":"distance","unit":"meter","agent":"Drone2","raw_strength":3.5,"raw_unit":"meter"}

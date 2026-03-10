@@ -32,6 +32,46 @@ class EnvConfig:
 
     jammer_patterns: List[str] = field(default_factory=lambda: ["Jammer*", "JammerActor*", "BP_Jammer*"])
 
+    # --- 通信与干扰参数 ---
+    # 频段与功率
+    comm_freq_hz: Dict[str, float] = field(default_factory=lambda: {
+        "Drone1": 2.4e9,
+        "Drone2": 2.4e9,
+        "Drone3": 2.4e9,
+    })
+    comm_tx_dbm_per_drone: Dict[str, float] = field(default_factory=lambda: {
+        "Drone1": 20.0,
+        "Drone2": 20.0,
+        "Drone3": 20.0,
+    })
+    comm_rx_gain_db: float = 0.0
+    comm_noise_floor_dbm: float = -95.0
+    comm_beacon_period_s: float = 0.2
+    comm_freq_min_hz: float = 2.3e9
+    comm_freq_max_hz: float = 2.5e9
+
+    # 跳频
+    hop_enabled: bool = False
+    hop_period_s: float = 1.0
+    hop_sequence: Dict[str, List[float]] = field(default_factory=lambda: {
+        "Drone1": [2.4e9, 2.41e9],
+        "Drone2": [2.4e9, 2.41e9],
+        "Drone3": [2.4e9, 2.41e9],
+    })
+
+    # 干扰器参数（伺服天线 + 窄带）
+    jammer_eirp_dbm: float = 40.0
+    jammer_gain_max_dbi: float = 10.0
+    jammer_gain_side_dbi: float = -5.0
+    jammer_main_lobe_width_deg: float = 30.0
+    jammer_narrow_bw_hz: float = 1.0e6
+    jammer_servo_slew_deg_per_s: float = 180.0
+    jammer_detection_snr_db: float = 5.0
+    jammer_detection_latency_ms: float = 50.0
+    jammer_reacquisition_ms: float = 100.0
+    jammer_target_sinr_db: float = 5.0
+    jammer_penalty_w: float = 1.0
+
 @dataclass
 class PPOConfig:
     seed: int = 42

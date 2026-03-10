@@ -68,6 +68,110 @@ PYTHONPATH=. python -m pytest -q tests/test_env_shapes.py
 
 该测试通过注入 DummyClient 验证 `reset` 与空间形状，不依赖 AirSim。
 
+## 训练日志（结构化 JSON）
+
+为满足强化学习训练过程的日志需求，新增 `utils/logging.py` 与 `runners/rollout.py`：
+
+- 日志内容：
+  - episode 开始/结束（含累计奖励）
+  - step 前后（观测、动作、奖励、环境 info）
+  - 策略更新（学习率、loss 等指标）
+  - 干扰强度（每步，含标准化单位与类型）
+- 输出格式：
+  - JSON（包含 `ts`、`level`、`name`、`msg`，以及结构化字段如 `episode`、`step`、`metrics`）
+  - 控制台实时输出 + 文件轮转（默认 5MB，保留 3 个备份）
+- 性能：
+  - 使用 `QueueHandler/QueueListener` 异步写入，降低对训练速度的影响
+
+启用与配置（`config/default.yaml`）：
+
+```yaml
+logging:
+  enabled: true
+  level: "INFO"           # DEBUG/INFO/WARNING/ERROR
+  console: true
+  file: true
+  file_path: "logs/train.log"
+  max_bytes: 5242880
+  backup_count: 3
+  queue: true
+  include_metrics_highlight: true
+```
+
+使用示例：
+
+```python
+from airsim_multi_rl.config import load_env_config
+from airsim_multi_rl.runners.rollout import run_rollout
+
+cfg = load_env_config()
+run_rollout(cfg, episodes=5, steps_per_ep=100)
+```
+
+远程日志：可在 `RLLogger.create` 外部包装自定义 Handler（如 HTTP/Fluentd），或通过队列监听器附加处理器实现。
+
+### 干扰强度日志（Interference Logging）
+
+为满足“每步干扰强度记录”的分析与溯源需求，日志系统新增结构化干扰日志接口：
+
+- 接口：`RLLogger.interference(episode, step, strength, kind, unit, **kwargs)`
+  - `episode`：回合编号（可选）
+  - `step`：步编号
+  - `strength`：干扰强度（标准化单位）
+  - `kind`：干扰类型（`power` 或 `distance`）
+  - `unit`：度量单位（如 `dB` 或 `meter`）
+  - `kwargs`：额外结构化字段，如 `agent`、`raw_strength`、`raw_unit`
+
+- 消息前缀：`msg` 字段固定为 `"[INTERFERENCE]"`，便于筛选与下游处理。
+
+- 记录位置：
+  - 步前（`step_before` 之后）：记录占位强度（power 记录 `0 dB`；distance 记录 `0 meter`），用于统一对齐时间轴。
+  - 步后（`step_after` 之后）：记录真实干扰强度：
+    - `power` 模式：从 `infos[agent]['jammer_power']` 读取功率并转换为 dB（`_to_db`）。
+    - `distance` 模式：从 `infos[agent]['nearest_jammer_dist']` 读取最近距离（米）。
+
+- 性能与异步：沿用结构化日志的异步队列写入，不改变训练主循环的同步逻辑。
+
+示例（来自 `runners/rollout.py`）：
+
+```python
+from airsim_multi_rl.utils.logging import RLLogger, _to_db
+
+logger = RLLogger.create(cfg.logging)
+kind = "power" if env.cfg.jammer_penalty_mode == "power" else "distance"
+# 步前占位
+for a in env.agents:
+    logger.interference(episode=ep, step=step, strength=_to_db(0.0) if kind=="power" else 0.0,
+                        kind=kind, unit="dB" if kind=="power" else "meter",
+                        agent=a, raw_strength=0.0, raw_unit="power" if kind=="power" else "meter")
+# 环境一步
+obs, rews, terms, truncs, infos = env.step(actions)
+# 步后真实值
+for a in env.agents:
+    if kind == "power":
+        raw_p = float(infos[a].get("jammer_power", 0.0))
+        logger.interference(episode=ep, step=step, strength=_to_db(raw_p), kind="power", unit="dB",
+                            agent=a, raw_strength=raw_p, raw_unit="power")
+    else:
+        d = float(infos[a].get("nearest_jammer_dist", 0.0))
+        logger.interference(episode=ep, step=step, strength=d, kind="distance", unit="meter",
+                            agent=a, raw_strength=d, raw_unit="meter")
+```
+
+日志样例（JSON 行）：
+
+```json
+{"ts":"2025-01-01T12:00:00","level":"INFO","name":"rl.train","msg":"[INTERFERENCE]","episode":1,"step":7,"strength":-0.0,"kind":"power","unit":"dB","agent":"Drone1","raw_strength":0.5,"raw_unit":"power"}
+```
+
+筛选命令：
+
+```bash
+grep "\[INTERFERENCE\]" logs/train.log | head -n 5
+```
+
+注意：如启用 `jammer_penalty_mode: power` 且开启 UE RPC，功率来自 `/jammer_power` 查询，并按 `cm_per_m` 做单位换算；距离模式则基于最近 Jammer 的向量范数。
+
 ## 目录结构（关键）
 
 ```

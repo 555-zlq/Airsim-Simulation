@@ -3,6 +3,8 @@ import numpy as np
 from airsim_multi_rl.config import EnvConfig
 from airsim_multi_rl.envs.multi_drone_parallel import AirSimMultiDroneParallelEnv
 from airsim_multi_rl.envs.airsim_client import AirSimClient
+from airsim_multi_rl.utils.logging import RLLogger
+from airsim_multi_rl.utils.logging import _to_db
 
 class DummyClient(AirSimClient):
     """最小 Dummy 适配层，用于在无 AirSim 的情况下运行形状测试。"""
@@ -105,3 +107,33 @@ def test_power_mode_info_keys():
         assert "timestamp" in infos[a]
         assert "pos_raw" in infos[a]
     env.close()
+
+
+def test_training_logger_basic():
+    from airsim_multi_rl.config import EnvConfig
+    cfg = EnvConfig()
+    # 配置日志文件到临时位置，避免污染仓库
+    cfg.logging.file_path = "logs/test_train.log"
+    cfg.logging.enabled = True
+    logger = RLLogger.create(cfg.logging)
+    # 基本调用不应抛异常，且支持 JSON 字段
+    logger.episode_start(1)
+    logger.step_before(1, 1, obs={"Drone1": [0, 0, -3]})
+    logger.policy_update(1, 1, metrics={"lr": 1e-3, "loss": 0.0})
+    logger.step_after(1, 1, actions={"Drone1": [0, 0, 0, 0]}, reward={"Drone1": 0.0}, info={"Drone1": {"dist_to_goal": 0.0}})
+    logger.episode_end(1, reward_sum=0.0)
+    logger.shutdown()
+
+
+def test_interference_logging_structured():
+    """验证干扰强度日志的结构与基础内容。"""
+    cfg = EnvConfig()
+    cfg.logging.file_path = "logs/test_train.log"
+    cfg.logging.enabled = True
+    logger = RLLogger.create(cfg.logging)
+    # 功率模式（dB）
+    logger.interference(episode=1, step=1, strength=_to_db(1.0), kind="power", unit="dB", agent="Drone1", raw_strength=1.0, raw_unit="power")
+    # 距离模式（米）
+    logger.interference(episode=1, step=2, strength=3.5, kind="distance", unit="meter", agent="Drone2", raw_strength=3.5, raw_unit="meter")
+    # 不应抛出异常，JSON 序列化正常
+    logger.shutdown()
